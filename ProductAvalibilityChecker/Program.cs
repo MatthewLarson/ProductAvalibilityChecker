@@ -88,8 +88,8 @@ namespace ProductAvalibilityChecker
             return ModRazor.Page(Data.FromFile("xbox-series-x.html"), (r, h) => new ViewModel(r, h))
                              .Title("Xbox Series X");
         }
-        [ResourceMethod(RequestMethod.POST)]
-        public IHandlerBuilder CheckItem(Stream stream)
+
+        public IHandlerBuilder CheckItem(string url, string selector, string compareValue)
         {
             ProductScraper scrape = new ProductScraper("https://www.xbox.com/en-us/configure/8wj714n3rbtl", ".src-pages-BundleBuilder-components-BundleBuilderHeader-__BundleBuilderHeader-module___checkoutButton", "Out of stock");
             // Start Scraping
