@@ -1,177 +1,133 @@
 ﻿using System;
 using IronWebScraper;
-using GenHTTP.Engine;
-using GenHTTP.Modules.IO;
-using GenHTTP.Modules.Practices;
-using GenHTTP.Modules.Websites;
-using GenHTTP.Modules.Security;
-using GenHTTP.Modules.Layouting;
-using GenHTTP.Modules.Webservices;
-using GenHTTP.Modules.Placeholders;
-using GenHTTP.Modules.Core;
-using GenHTTP.Themes.AdminLTE;
-using GenHTTP.Api.Content.Templating;
-using GenHTTP.Api.Protocol;
-using GenHTTP.Api.Content;
-using GenHTTP.Modules.Razor;
-using GenHTTP.Modules.Controllers;
-using System.Collections.Generic;
-using GenHTTP.Modules.Basics;
-using System.Threading.Tasks;
 using System.Threading;
-using Microsoft.Extensions.Configuration;
-using System.Linq;
 using System.IO;
+using EmbedIO.WebSockets;
+using System.Threading.Tasks;
+using EmbedIO;
+using EmbedIO.WebApi;
+using EmbedIO.Actions;
+using EmbedIO.Files;
+using Swan.Logging;
+using EmbedIO.Routing;
 
 namespace ProductAvalibilityChecker
 {
     class Program
     {
+        /// <summary>
+        /// Defines the entry point of the application.
+        /// </summary>
+        /// <param name="args">The arguments.</param>
         static void Main(string[] args)
         {
-            var thread1 = new Thread(delegate ()
+            var url = "http://localhost:8080/";
+            if (args.Length > 0)
+                url = args[0];
+
+            // Our web server is disposable.
+            using (var server = CreateWebServer(url))
             {
-                StartServer();
-            });
-            thread1.Start();
+                // Once we've registered our modules and configured them, we call the RunAsync() method.
+                server.RunAsync();
 
-            var browser = new System.Diagnostics.Process()
-            {
-                StartInfo = new System.Diagnostics.ProcessStartInfo("http://localhost:8080") { UseShellExecute = true }
-            };
-            browser.Start();
+                var browser = new System.Diagnostics.Process()
+                {
+                    StartInfo = new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true }
+                };
+                browser.Start();
+                // Wait for any key to be pressed before disposing of our web server.
+                // In a service, we'd manage the lifecycle of our web server using
+                // something like a BackgroundWorker or a ManualResetEvent.
+                Console.ReadKey(true);
+            }
 
-            Console.ReadKey();
 
-            browser.Close();
+        }
 
-            thread1.Interrupt();
+        // Create and configure our web server.
+        private static WebServer CreateWebServer(string url)
+        {
+            var server = new WebServer(o => o
+                    .WithUrlPrefix(url)
+                    .WithMode(HttpListenerMode.EmbedIO))
+                // First, we will configure our web server by adding Modules.
+                .WithLocalSessionManager()
+                .WithWebApi("/api", m => m
+                    .WithController<PeopleController>())
+                .WithModule(new WebSocketsChatServer("/chat"))
+                .WithStaticFolder("/", Environment.CurrentDirectory, true, m => m
+                    .WithContentCaching(true)) // Add static files after other modules to avoid conflicts
+                .WithModule(new ActionModule("/", HttpVerbs.Any, ctx => ctx.SendDataAsync(new { Message = "Error" })));
 
+            // Listen for state changes.
+            server.StateChanged += (s, e) => $"WebServer New State - {e.NewState}".Info();
+
+            return server;
         }
 
         static void StartServer()
         {
 
-
-            var app = Layout.Create()
-                    .AddController<ProductController>("product")
-                    .Index(ModRazor.Page(Data.FromFile("xbox-series-x.html"), (r, h) => new ViewModel(r, h))
-                    .Title("Xbox Series X"));
-                    //.AddService<ProductResource>("api");
-                
-
-            var theme = Theme.Create()
-                             .Title("Product Availablity Checker");
-
-            var website = Website.Create()
-                                 .Theme(theme)
-                                 .Content(app);
-
-            Host.Create()
-                .Handler(website)
-                .Defaults()
-                .Development()
-                .Console()
-                .Run();
         }
     }
 
-    // Model
-    //public record Book(int ID, string Title);
-
-    // Controller
-    public class ProductController
+    public class PeopleController : WebApiController
     {
-
-        public IHandlerBuilder Index()
+        // You need to add a default constructor where the first argument
+        // is an IHttpContext
+        public PeopleController()
+            : base()
         {
-            return ModRazor.Page(Data.FromFile("xbox-series-x.html"), (r, h) => new ViewModel(r, h))
-                             .Title("Xbox Series X");
         }
 
-        public IHandlerBuilder CheckItem(string url, string selector, string compareValue)
+        // You need to include the WebApiHandler attribute to each method
+        // where you want to export an endpoint. The method should return
+        // bool or Task<bool>.
+        [Route(HttpVerbs.Post, "/check-item")]
+        public async Task<int> CheckItem([FormField] string url, [FormField] string selector, [FormField] string compareValue)
         {
-            ProductScraper scrape = new ProductScraper("https://www.xbox.com/en-us/configure/8wj714n3rbtl", ".src-pages-BundleBuilder-components-BundleBuilderHeader-__BundleBuilderHeader-module___checkoutButton", "Out of stock");
-            // Start Scraping
-            scrape.Start();
-
-            return null;
+            var scraper = new ProductScraper(url, selector, compareValue);
+            await scraper.StartAsync().ConfigureAwait(false);
+            return scraper.itemAvailable;
         }
-
-        //[ResourceMethod(RequestMethod.POST)]
-        //public int CheckItem(string url, string selector, string compareValue)
-        //{
-        //    ProductScraper scrape = new ProductScraper("https://www.xbox.com/en-us/configure/8wj714n3rbtl", ".src-pages-BundleBuilder-components-BundleBuilderHeader-__BundleBuilderHeader-module___checkoutButton", "Out of stock");
-        //    // Start Scraping
-        //    scrape.Start();
-
-        //    return scrape.itemAvailable;
-        //}
-
-        //public IHandlerBuilder Create()
-        //{
-        //    return ModRazor.Page(Data.FromFile("BookCreation.html"))
-        //                     .Title("Add Book");
-        //}
-
-        //[ControllerAction(RequestMethod.POST)]
-        //public IHandlerBuilder Create(string title)
-        //{
-        //    //var book = new Book(_Books.Max(b => b.ID) + 1, title);
-
-        //    //_Books.Add(book);
-
-        //    return Redirect.To("{index}/", true);
-        //}
-
-        //public IHandlerBuilder Edit([FromPath] int id)
-        //{
-        //    //var book = _Books.Where(b => b.ID == id).First();
-
-        //    return ModRazor.Page(Data.FromFile("BookEditor.html"), (r, h) => new ViewModel(r, h, book))
-        //                     .Title(book.Title);
-        //}
-
-
-
-        //[ControllerAction(RequestMethod.POST)]
-        //public IHandlerBuilder CheckItem()
-        //{
-
-
-        //    //return Redirect.To("{index}/", true);
-        //}        //[ControllerAction(RequestMethod.POST)]
-        //public IHandlerBuilder CheckItem()
-        //{
-
-
-        //    //return Redirect.To("{index}/", true);
-        //}
-
-        //[ControllerAction(RequestMethod.POST)]
-        //public IHandlerBuilder Delete([FromPath] int id)
-        //{
-        //    _Books.RemoveAll(b => b.ID == id);
-
-        //    return Redirect.To("{index}/", true);
-        //}
 
     }
 
-    
 
-    //public class ProductResource
-    //{
-    //    [ResourceMethod(RequestMethod.POST)]
-    //    public int CheckItem(string url, string selector, string compareValue)
-    //    {
-    //        ProductScraper scrape = new ProductScraper("https://www.xbox.com/en-us/configure/8wj714n3rbtl", ".src-pages-BundleBuilder-components-BundleBuilderHeader-__BundleBuilderHeader-module___checkoutButton", "Out of stock");
-    //        // Start Scraping
-    //        scrape.Start();
+    /// <summary>
+    /// Defines a very simple chat server.
+    /// </summary>
+    public class WebSocketsChatServer : WebSocketModule
+        {
+            public WebSocketsChatServer(string urlPath)
+                : base(urlPath, true)
+            {
+                // placeholder
+            }
 
-    //        return scrape.itemAvailable;
-    //    }
-    //}
+            /// <inheritdoc />
+            protected override Task OnMessageReceivedAsync(
+                IWebSocketContext context,
+                byte[] rxBuffer,
+                IWebSocketReceiveResult rxResult)
+                => SendToOthersAsync(context, Encoding.GetString(rxBuffer));
+
+            /// <inheritdoc />
+            protected override Task OnClientConnectedAsync(IWebSocketContext context)
+                => Task.WhenAll(
+                    SendAsync(context, "Welcome to the chat room!"),
+                    SendToOthersAsync(context, "Someone joined the chat room."));
+
+            /// <inheritdoc />
+            protected override Task OnClientDisconnectedAsync(IWebSocketContext context)
+                => SendToOthersAsync(context, "Someone left the chat room.");
+
+            private Task SendToOthersAsync(IWebSocketContext context, string payload)
+                => BroadcastAsync(payload, c => c != context);
+        }
+
+
 
     class ProductScraper : WebScraper
     {
