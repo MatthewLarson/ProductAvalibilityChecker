@@ -10,6 +10,8 @@ using EmbedIO.Actions;
 using EmbedIO.Files;
 using Swan.Logging;
 using EmbedIO.Routing;
+using Twilio;
+using Twilio.Rest.Api.V2010.Account;
 
 namespace ProductAvalibilityChecker
 {
@@ -90,6 +92,18 @@ namespace ProductAvalibilityChecker
             var scraper = new ProductScraper(url, selector, compareValue);
             await scraper.StartAsync().ConfigureAwait(false);
             return scraper.itemAvailable;
+        }
+
+        [Route(HttpVerbs.Post, "/send-sms")]
+        public async Task SendSMS([FormField] string twiliophone, [FormField] string cellphone, [FormField] string tkey, [FormField] string tvalue, [FormField] string url, [FormField] int isavailable)
+        {
+            TwilioClient.Init(tkey, tvalue);
+            string prefstr = isavailable == 1 ? "AVAILABLE: " : "UNAVAILABLE: ";
+            var message = await MessageResource.CreateAsync(
+                body: $"{prefstr}{url}",
+                from: new Twilio.Types.PhoneNumber(twiliophone),
+                to: new Twilio.Types.PhoneNumber(cellphone)
+            ).ConfigureAwait(false);
         }
 
     }

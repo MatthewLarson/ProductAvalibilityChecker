@@ -13,27 +13,56 @@
         <div class="row">
             <div class="col-12">
                 <form method="POST" action="/api/check-item" id="ItemForm">
+
+                    <input type="hidden" name="isavailable" id="isAvailable" value="0" />
                     <div class="row">
 
 
                         <div class="col-12 col-md-4">
-                            <input type="text" class="form-control" name="url" placeholder="https://www.xbox.com/en-us/configure/8wj714n3rbtl" value="https://www.xbox.com/en-us/configure/8wj714n3rbtl" /></div>
-                        
+                            <label class="control-label">URL</label>
+                            <input type="text" class="form-control" name="url" placeholder="https://www.xbox.com/en-us/configure/8wj714n3rbtl" value="https://www.xbox.com/en-us/configure/8wj714n3rbtl" />
+                        </div>
+
                         <div class="col-12 col-md-4">
+                            <label class="control-label">CSS Selector</label>
                             <input type="text" class="form-control" name="selector" placeholder=".src-pages-BundleBuilder-components-BundleBuilderHeader-__BundleBuilderHeader-module___checkoutButton" value=".src-pages-BundleBuilder-components-BundleBuilderHeader-__BundleBuilderHeader-module___checkoutButton" />
                         </div>
-                        
+
                         <div class="col-12 col-md-4">
+                            <label class="control-label">Compare Value</label>
                             <input type="text" class="form-control" name="compareValue" placeholder="Out of stock" value="Out of stock" />
                         </div>
-                        
+
+                    </div>
+                    <div class="row">
+
+                        <div class="col-12 col-md-3">
+                            <label class="control-label">Twilio Phone #</label>
+                            <input type="tel" id="TwilioPhone" class="form-control" name="twiliophone" placeholder="+12223334444" />
+                        </div>
+
+                        <div class="col-12 col-md-3">
+                            <label class="control-label">Cell Phone #</label>
+                            <input type="tel" id="CellPhone" class="form-control" name="cellphone" placeholder="+12223334444" />
+                        </div>
+
+                        <div class="col-12 col-md-3">
+                            <label class="control-label">Twilio Account SID</label>
+                            <input type="text" id="TKey" class="form-control" name="tkey" />
+                        </div>
+
+                        <div class="col-12 col-md-3">
+                            <label class="control-label">Twilio Auth Token</label>
+                            <input type="text" id="TValue" class="form-control" name="tvalue" />
+                        </div>
+
                     </div>
                     <div class="row">
                         <div class="col-12">
-                            <a href="javascript:submitForm();" class="btn btn-primary">Start</a>
+                            <a href="javascript:preSubmitForm();" class="btn btn-primary">Start</a>
                         </div>
                     </div>
-                    
+
                 </form>
             </div>
         </div>
@@ -50,7 +79,7 @@
 
         <div class="row">
             <div class="col-12">
-                <a href="javascript:stopChecker();" class="btn btn-primary">Stop</a>
+                <a href="javascript:stopChecker();" class="btn btn-primary mx-2">Stop</a> <a href="javascript:sendAlertSMS();" class="btn btn-primary mx-2">Test SMS</a>
             </div>
         </div>
     </div>
@@ -62,7 +91,38 @@
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js" integrity="sha384-B4gt1jrGC7Jh4AgTPSdUtOBvfO8shuf57BaghqFfPlYxofvL8/KUEfYiJOMMV+rV" crossorigin="anonymous"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.bundle.min.js" integrity="sha384-LtrjvnR4Twt/qOuYxE721u19sVFLVSA4hf/rRt6PrZTmiPltdZcI7q7PXQBYTKyf" crossorigin="anonymous"></script>
     <script>
+
+        function isNothing(x) {
+            if (x == 'undefined' || x == undefined || x == null) {
+                return true;
+            } else {
+                return false;
+            }
+        }
+
+        $(document).ready(function () {
+            var twiliophone = getCookie("TwilioPhone");
+            var cellphone = getCookie("CellPhone");
+            var tkey = getCookie("tKey");
+            var tvalue = getCookie("tValue");
+
+            if (!isNothing(tkey) && !isNothing(tvalue) && !isNothing(twiliophone) && !isNothing(cellphone)) {
+                $("#TwilioPhone").val(twiliophone);
+                $("#CellPhone").val(cellphone);
+                $("#TKey").val(tkey);
+                $("#TValue").val(tvalue);
+            }
+        });
+
         var isStopped = false;
+
+        function preSubmitForm() {
+            setCookie("TwilioPhone", $("#TwilioPhone").val(), 30);
+            setCookie("CellPhone", $("#CellPhone").val(), 30);
+            setCookie("tKey", $("#TKey").val(), 30);
+            setCookie("tValue", $("#TKey").val(), 30);
+            submitForm();
+        }
 
         function submitForm() {
             setTimeout(checkItem, 3000);
@@ -70,16 +130,26 @@
 
         function checkItem() {
             if (isStopped == false) {
+
                 $.post({
                     url: "/api/check-item",
                     method: "POST",
                     data: $("#ItemForm").serialize(),
                     success: function (data) {
+                        var lastIsAvailable = parseInt($("#isAvailable").val());
                         if (data != 1) {
+                            if (data != lastIsAvailable) {
+                                $("#isAvailable").val(0);
+                                sendAlertSMS();
+                            }
                             var tCount = parseInt($("#GoodCount").html()) + 1;
                             $("#GoodCount").html(tCount);
                             submitForm();
                         } else {
+                            if (data != lastIsAvailable) {
+                                $("#isAvailable").val(1);
+                                sendAlertSMS();
+                            }
                             var tCount = parseInt($("#BadCount").html()) + 1;
                             $("#BadCount").html(tCount);
                             submitForm();
@@ -92,9 +162,62 @@
             }
         };
 
+        function sendAlertSMS() {
+
+            $.post({
+                url: "/api/send-sms",
+                method: "POST",
+                data: $("#ItemForm").serialize(),
+                success: function (data) {
+                    console.log("SMS Sent");
+                },
+                error: function (er) {
+                    console.error("Failed to make request!");
+                }
+            });
+
+        };
+
         function stopChecker() {
             isStopped = true;
         };
+
+        //COOKIE STUFF
+
+        function setCookie(cname, cvalue, exdays) {
+            var d = new Date();
+            d.setTime(d.getTime() + (exdays * 24 * 60 * 60 * 1000));
+            var expires = "expires=" + d.toUTCString();
+            document.cookie = cname + "=" + cvalue + ";" + expires + ";path=/";
+        }
+
+        function getCookie(cname) {
+            var name = cname + "=";
+            var ca = document.cookie.split(';');
+            for (var i = 0; i < ca.length; i++) {
+                var c = ca[i];
+                while (c.charAt(0) == ' ') {
+                    c = c.substring(1);
+                }
+                if (c.indexOf(name) == 0) {
+                    return c.substring(name.length, c.length);
+                }
+            }
+            return "";
+        }
+
+        //function checkCookie() {
+        //    var user = getCookie("username");
+        //    if (user != "") {
+        //        alert("Welcome again " + user);
+        //    } else {
+        //        user = prompt("Please enter your name:", "");
+        //        if (user != "" && user != null) {
+        //            setCookie("username", user, 365);
+        //        }
+        //    }
+        //}
+
     </script>
 </body>
 </html>
