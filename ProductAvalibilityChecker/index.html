@@ -117,10 +117,11 @@
         var isStopped = false;
 
         function preSubmitForm() {
+            isStopped = false;
             setCookie("TwilioPhone", $("#TwilioPhone").val(), 30);
             setCookie("CellPhone", $("#CellPhone").val(), 30);
             setCookie("tKey", $("#TKey").val(), 30);
-            setCookie("tValue", $("#TKey").val(), 30);
+            setCookie("tValue", $("#tValue").val(), 30);
             submitForm();
         }
 
@@ -137,9 +138,9 @@
                     data: $("#ItemForm").serialize(),
                     success: function (data) {
                         var lastIsAvailable = parseInt($("#isAvailable").val());
-                        if (data != 1) {
+                        if (data != 0) {
                             if (data != lastIsAvailable) {
-                                $("#isAvailable").val(0);
+                                $("#isAvailable").val(1);
                                 sendAlertSMS();
                             }
                             var tCount = parseInt($("#GoodCount").html()) + 1;
@@ -147,7 +148,7 @@
                             submitForm();
                         } else {
                             if (data != lastIsAvailable) {
-                                $("#isAvailable").val(1);
+                                $("#isAvailable").val(0);
                                 sendAlertSMS();
                             }
                             var tCount = parseInt($("#BadCount").html()) + 1;
